@@ -14,7 +14,7 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=As
 async def init_db():
     """Create all tables on startup."""
     from models.pipeline import Base
-    from models.user import User  # ensure User table is registered  # noqa: F401
+    from models.user import User, RefreshToken  # ensure tables are registered  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
