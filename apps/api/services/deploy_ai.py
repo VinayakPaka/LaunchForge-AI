@@ -47,8 +47,9 @@ async def run_agent_prompt(
             {"role": "user",   "content": user_prompt},
         ],
         "params": {
-            "max_tokens":  max_tokens,
             "temperature": 0.7,
+            # Note: Do NOT pass max_tokens or max_completion_tokens — Bytez/GPT-4.1
+            # rejects requests that set both simultaneously. Default output limit is sufficient.
         },
     }
 
@@ -65,6 +66,12 @@ async def run_agent_prompt(
                     raise Exception(f"Bytez model error: {data['error']}")
                 output = data.get("output", "")
                 logger.info(f"Bytez call success (attempt {attempt}, model={model})")
+                # Bytez returns chat completion as {"role": "assistant", "content": "..."}
+                if isinstance(output, dict):
+                    return output.get("content", str(output))
+                elif isinstance(output, list) and output:
+                    first = output[0]
+                    return first.get("content", str(first)) if isinstance(first, dict) else str(first)
                 return str(output) if not isinstance(output, str) else output
 
             elif response.status_code in (500, 502, 503, 504):
