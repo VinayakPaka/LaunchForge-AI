@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
+import Image from 'next/image'
 import {
   CheckCircle, Download, ExternalLink, Code2, Shield, BarChart3,
   Target, Globe, ArrowLeft, Zap, Copy, ChevronDown, ChevronUp
@@ -317,6 +318,19 @@ export default function ResultsPage() {
           {/* Marketing Kit */}
           <SectionCard title="Marketing & Launch Kit" icon={<Globe className="w-5 h-5" />}>
             <div className="space-y-4">
+              {/* Hero Image */}
+              {copy.heroImage && typeof copy.heroImage === 'string' && (
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <Image
+                    src={copy.heroImage as string}
+                    alt="Hero section image"
+                    width={1280}
+                    height={720}
+                    className="w-full object-cover"
+                    unoptimized
+                  />
+                </div>
+              )}
               {Array.isArray(copy.taglines) && (
                 <div>
                   <div className="text-xs text-slate-500 mb-2">Tagline Options</div>
@@ -345,6 +359,53 @@ export default function ResultsPage() {
                   <span className="text-slate-500">Product Hunt: </span>
                   <span className="text-amber-300 font-medium">{String(copy.productHuntTagline)}</span>
                 </p>
+              )}
+              {/* OG / Social Sharing Image */}
+              {copy.ogImage && typeof copy.ogImage === 'string' && (
+                <div>
+                  <div className="text-xs text-slate-500 mb-2">Social Sharing Preview (OG Image)</div>
+                  <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <Image
+                      src={copy.ogImage as string}
+                      alt="OG social sharing image"
+                      width={1200}
+                      height={630}
+                      className="w-full object-cover"
+                      unoptimized
+                    />
+                  </div>
+                </div>
+              )}
+              {/* Pitch Deck with slide images */}
+              {Array.isArray(copy.pitchDeck) && (copy.pitchDeck as Array<{slide: number; title: string; content: string; slideImage?: string; speakerNote?: string}>).length > 0 && (
+                <div>
+                  <div className="text-xs text-slate-500 mb-3">Pitch Deck ({(copy.pitchDeck as unknown[]).length} slides)</div>
+                  <div className="space-y-4">
+                    {(copy.pitchDeck as Array<{slide: number; title: string; content: string; slideImage?: string; speakerNote?: string}>).map((slide) => (
+                      <div key={slide.slide} className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                        {slide.slideImage && (
+                          <Image
+                            src={slide.slideImage}
+                            alt={`Slide ${slide.slide}: ${slide.title}`}
+                            width={1280}
+                            height={720}
+                            className="w-full object-cover"
+                            unoptimized
+                          />
+                        )}
+                        <div className="p-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ background: 'rgba(124,58,237,0.2)', color: '#c084fc' }}>
+                              {slide.slide}
+                            </span>
+                            <span className="text-sm font-semibold text-white">{slide.title}</span>
+                          </div>
+                          <p className="text-xs text-slate-400">{slide.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           </SectionCard>
