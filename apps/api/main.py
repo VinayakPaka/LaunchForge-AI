@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 from database import init_db
 from routers.pipeline import router as pipeline_router
 from routers.auth import router as auth_router
+from routers.images import router as images_router
 
 
 @asynccontextmanager
@@ -67,6 +68,7 @@ app.add_middleware(
 # Register routers
 app.include_router(pipeline_router)
 app.include_router(auth_router)
+app.include_router(images_router)
 
 
 @app.get("/api/health")
