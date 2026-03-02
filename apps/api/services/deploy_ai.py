@@ -19,7 +19,7 @@ RETRY_DELAY     = 2.0  # seconds between retries on transient errors
 
 
 def _get_headers() -> dict:
-    api_key = os.getenv("BYTEZ_API_KEY", "7d83a11bd95a2cba8d0484174add2ace")
+    api_key = os.getenv("BYTEZ_API_KEY", "e2d6d9f7ac212b37e87774a5878f6e7e")
     return {
         "Authorization": f"Key {api_key}",
         "Content-Type": "application/json",
@@ -48,8 +48,10 @@ async def run_agent_prompt(
         ],
         "params": {
             "temperature": 0.7,
-            # Note: Do NOT pass max_tokens or max_completion_tokens — Bytez/GPT-4.1
-            # rejects requests that set both simultaneously. Default output limit is sufficient.
+            # max_completion_tokens is the correct param for GPT-4.1 via Bytez.
+            # Do NOT use max_tokens — Bytez converts it to max_completion_tokens internally,
+            # causing a "cannot set both" conflict. Using 4096 keeps responses concise and fast.
+            "max_completion_tokens": max_tokens,
         },
     }
 
