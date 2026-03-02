@@ -1,88 +1,63 @@
-"""Deploy AI client — wraps Complete.dev authentication and messaging."""
+"""Groq AI client — uses Groq API with LLaMA3-70b for all agent prompts."""
 import os
-import json
 import logging
-from typing import Optional
 import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-
-def get_access_token() -> str:
-    """Obtain OAuth2 client_credentials token from Deploy AI auth endpoint."""
-    data = {
-        "grant_type": "client_credentials",
-        "client_id": os.getenv("CLIENT_ID", ""),
-        "client_secret": os.getenv("CLIENT_SECRET", ""),
-    }
-    url = os.getenv("AUTH_URL", "https://api-auth.dev.deploy.ai/oauth2/token")
-    response = httpx.post(url, data=data, timeout=30)
-    response.raise_for_status()
-    return response.json()["access_token"]
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = "llama3-70b-8192"
 
 
-def create_chat(access_token: str) -> str:
-    """Create a new chat session with the GPT-5 agent."""
-    headers = {
-        "accept": "application/json",
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {access_token}",
-        "X-Org": os.getenv("ORG_ID", ""),
-    }
-    json_data = {
-        "agentId": os.getenv("AGENT_ID", "GPT_5"),
-        "stream": False,
-    }
-    api_url = os.getenv("API_URL", "https://core-api.dev.deploy.ai")
-    response = httpx.post(f"{api_url}/chats", headers=headers, json=json_data, timeout=30)
-    if response.status_code == 200:
-        return response.json()["id"]
-    raise Exception(f"Failed to create chat: {response.status_code} {response.text}")
-
-
-def call_agent(access_token: str, chat_id: str, prompt: str) -> str:
-    """Send a message to the agent and return the text response."""
-    headers = {
-        "X-Org": os.getenv("ORG_ID", ""),
-        "Authorization": f"Bearer {access_token}",
+def _get_headers() -> dict:
+    """Build Groq auth headers."""
+    return {
+        "Authorization": f"Bearer {os.getenv('GROQ_API_KEY', '')}",
         "Content-Type": "application/json",
     }
-    json_data = {
-        "chatId": chat_id,
-        "stream": False,
-        "content": [{"type": "text", "value": prompt}],
+
+
+def call_groq(system_prompt: str, user_prompt: str) -> str:
+    """Send system + user prompt to Groq and return the text response."""
+    payload = {
+        "model": os.getenv("GROQ_MODEL", GROQ_MODEL),
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.7,
+        "max_tokens": 4096,
     }
-    api_url = os.getenv("API_URL", "https://core-api.dev.deploy.ai")
-    response = httpx.post(f"{api_url}/messages", headers=headers, json=json_data, timeout=120)
+    response = httpx.post(
+        os.getenv("GROQ_API_URL", GROQ_API_URL),
+        headers=_get_headers(),
+        json=payload,
+        timeout=120,
+    )
     if response.status_code == 200:
-        return response.json()["content"][0]["value"]
-    raise Exception(f"Failed to send message: {response.status_code} {response.text}")
+        return response.json()["choices"][0]["message"]["content"]
+    raise Exception(f"Groq API error: {response.status_code} {response.text}")
 
 
 async def run_agent_prompt(system_prompt: str, user_prompt: str) -> str:
     """
-    High-level async helper: obtains token → creates chat → sends prompt → returns result.
-    Falls back to a structured mock if credentials are not configured.
+    High-level async helper: calls Groq LLaMA3-70b with system + user prompts.
+    Falls back to structured mock if API key is not configured.
     """
-    client_id = os.getenv("CLIENT_ID", "")
-    client_secret = os.getenv("CLIENT_SECRET", "")
+    api_key = os.getenv("GROQ_API_KEY", "")
 
-    if not client_id or client_id == "your_client_id_here":
-        logger.warning("Deploy AI credentials not configured — returning mock response")
-        # Use combined prompt so mock can match on system_prompt keywords (e.g. "validator")
+    if not api_key:
+        logger.warning("Groq API key not configured — returning mock response")
         return _mock_response(system_prompt + " " + user_prompt)
 
     try:
-        token = get_access_token()
-        chat_id = create_chat(token)
-        # Send system context first, then the actual user prompt
-        call_agent(token, chat_id, system_prompt)
-        result = call_agent(token, chat_id, user_prompt)
+        result = call_groq(system_prompt, user_prompt)
+        logger.info("Groq API call successful")
         return result
     except Exception as e:
-        logger.error(f"Deploy AI call failed: {e}")
+        logger.error(f"Groq API call failed: {e}")
         return _mock_response(system_prompt + " " + user_prompt)
 
 
