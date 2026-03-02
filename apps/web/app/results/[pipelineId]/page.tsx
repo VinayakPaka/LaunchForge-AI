@@ -25,6 +25,50 @@ function safeStr(val: unknown): string {
   return String(val)
 }
 
+/**
+ * Image with graceful fallback.
+ * Shows a styled placeholder when the external image URL fails to load
+ * (e.g. pollinations.ai service down, CORS, network error).
+ */
+function AIImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
+  return (
+    <div className="relative w-full">
+      {/* Actual image — hidden until loaded, replaced by placeholder on error */}
+      {status !== 'error' && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt={alt}
+          className={`w-full object-cover transition-opacity duration-500 ${status === 'loaded' ? 'opacity-100' : 'opacity-0 absolute inset-0'} ${className ?? ''}`}
+          loading="lazy"
+          onLoad={() => setStatus('loaded')}
+          onError={() => setStatus('error')}
+        />
+      )}
+      {/* Skeleton shown while loading */}
+      {status === 'loading' && (
+        <div className="w-full flex items-center justify-center rounded-lg animate-pulse" style={{ minHeight: 200, background: 'rgba(124,58,237,0.07)', border: '1px dashed rgba(124,58,237,0.2)' }}>
+          <div className="text-center">
+            <div className="text-3xl mb-2">🎨</div>
+            <div className="text-xs text-slate-500">Generating image…</div>
+          </div>
+        </div>
+      )}
+      {/* Error placeholder */}
+      {status === 'error' && (
+        <div className="w-full flex items-center justify-center rounded-lg" style={{ minHeight: 200, background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)' }}>
+          <div className="text-center px-6">
+            <div className="text-3xl mb-2">🖼️</div>
+            <div className="text-xs text-slate-500 mb-1">AI-generated image</div>
+            <div className="text-[11px] text-slate-600 max-w-xs">{alt}</div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface PipelineState {
   pipelineId: string
   ideaText: string
@@ -337,8 +381,7 @@ export default function ResultsPage() {
               {/* Hero Image */}
               {copy.heroImage && typeof copy.heroImage === 'string' && (
                 <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={copy.heroImage} alt="Hero section image" className="w-full object-cover" loading="lazy" />
+                  <AIImage src={copy.heroImage} alt="Hero section image" />
                 </div>
               )}
               {Array.isArray(copy.taglines) && (
@@ -375,8 +418,7 @@ export default function ResultsPage() {
                 <div>
                   <div className="text-xs text-slate-500 mb-2">Social Sharing Preview (OG Image)</div>
                   <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={copy.ogImage} alt="OG social sharing image" className="w-full object-cover" loading="lazy" />
+                    <AIImage src={copy.ogImage} alt="OG social sharing image" />
                   </div>
                 </div>
               )}
@@ -388,8 +430,7 @@ export default function ResultsPage() {
                     {(copy.pitchDeck as Array<{slide: number; title: string; content: string; slideImage?: string; speakerNote?: string}>).map((slide) => (
                       <div key={slide.slide} className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
                         {slide.slideImage && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={slide.slideImage} alt={`Slide ${slide.slide}: ${slide.title}`} className="w-full object-cover" loading="lazy" />
+                          <AIImage src={slide.slideImage} alt={`Slide ${slide.slide}: ${slide.title}`} />
                         )}
                         <div className="p-3">
                           <div className="flex items-center gap-2 mb-1">
