@@ -1,5 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // SVG images are now served internally via /api/images/svg (FastAPI backend).
+  // No external image hostname needed.
+  images: {
+    dangerouslyAllowSVG: true,
+    contentDispositionType: 'attachment',
+    remotePatterns: [],
+  },
   async rewrites() {
     return [
       {
