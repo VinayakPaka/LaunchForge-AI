@@ -55,6 +55,35 @@ C_AMBER      = (217, 119,   6)
 MARGIN       = 14   # mm left/right
 LINE_H       = 6    # mm standard line height
 
+# ── Per-slide-type colour themes (bg1, bg2, accent RGB) ───────────────────────
+SLIDE_THEMES: dict[str, dict] = {
+    "problem":     {"bg": (26, 10, 10),  "bg2": (45, 16, 16),  "acc": (239, 68,  68),  "acc2": (220, 38,  38),  "icon": "!"},
+    "solution":    {"bg": (10, 26, 10),  "bg2": (13, 46, 13),  "acc": (34,  197, 94),  "acc2": (22,  163, 74),  "icon": "+"},
+    "market":      {"bg": (10, 15, 26),  "bg2": (13, 26, 48),  "acc": (59,  130, 246), "acc2": (37,  99,  235), "icon": "~"},
+    "product":     {"bg": (15, 10, 26),  "bg2": (26, 15, 48),  "acc": (168, 85,  247), "acc2": (147, 51,  234), "icon": "*"},
+    "business":    {"bg": (10, 26, 20),  "bg2": (13, 32, 16),  "acc": (16,  185, 129), "acc2": (5,   150, 105), "icon": "$"},
+    "traction":    {"bg": (10, 26, 15),  "bg2": (13, 42, 24),  "acc": (52,  211, 153), "acc2": (16,  185, 129), "icon": "^"},
+    "gtm":         {"bg": (26, 16, 10),  "bg2": (45, 26, 10),  "acc": (245, 158, 11),  "acc2": (217, 119, 6),   "icon": ">"},
+    "competition": {"bg": (10, 15, 26),  "bg2": (16, 24, 40),  "acc": (6,   182, 212), "acc2": (8,   145, 178), "icon": "#"},
+    "team":        {"bg": (26, 10, 16),  "bg2": (45, 13, 26),  "acc": (236, 72,  153), "acc2": (219, 39,  119), "icon": "@"},
+    "ask":         {"bg": (15, 15, 10),  "bg2": (26, 26, 10),  "acc": (234, 179, 8),   "acc2": (202, 138, 4),   "icon": "D"},
+    "default":     {"bg": (10, 10, 20),  "bg2": (20, 20, 40),  "acc": (124, 58,  237), "acc2": (79,  70,  229), "icon": "-"},
+}
+
+def _slide_theme(title: str) -> dict:
+    t = title.lower()
+    if "problem" in t:           return SLIDE_THEMES["problem"]
+    if "solution" in t:          return SLIDE_THEMES["solution"]
+    if "market" in t or "opportunit" in t: return SLIDE_THEMES["market"]
+    if "product" in t:           return SLIDE_THEMES["product"]
+    if "business" in t or "model" in t or "revenue" in t: return SLIDE_THEMES["business"]
+    if "traction" in t:          return SLIDE_THEMES["traction"]
+    if "go-to" in t or "gtm" in t or "launch" in t: return SLIDE_THEMES["gtm"]
+    if "competi" in t:           return SLIDE_THEMES["competition"]
+    if "team" in t:              return SLIDE_THEMES["team"]
+    if "ask" in t or "fund" in t or "invest" in t: return SLIDE_THEMES["ask"]
+    return SLIDE_THEMES["default"]
+
 
 # ── Base PDF class ─────────────────────────────────────────────────────────────
 class _BasePDF(FPDF):
@@ -64,6 +93,7 @@ class _BasePDF(FPDF):
         super().__init__(*args, **kwargs)
         self._section_title = section_title
         self._idea = idea[:80]
+        self._slide_mode = False   # suppresses header/footer on slide pages
         # Register DejaVu Unicode fonts (no italic variant — map I → regular)
         self.add_font("Sans",  "",  FONT_REGULAR, uni=True)
         self.add_font("Sans",  "B", FONT_BOLD,    uni=True)
@@ -75,8 +105,10 @@ class _BasePDF(FPDF):
         self.set_auto_page_break(auto=True, margin=18)
         self.add_page()
 
-    # ── Header ──────────────────────────────────────────────────────────────
+    # ── Header / Footer (suppressed on slide pages) ─────────────────────────
     def header(self):
+        if self._slide_mode:
+            return          # slide pages manage their own layout
         # Navy banner
         self.set_fill_color(*C_NAVY)
         self.rect(0, 0, 210, 20, style="F")
@@ -102,6 +134,8 @@ class _BasePDF(FPDF):
 
     # ── Footer ──────────────────────────────────────────────────────────────
     def footer(self):
+        if self._slide_mode:
+            return
         self.set_y(-14)
         self.set_draw_color(*C_RULE)
         self.set_line_width(0.3)
@@ -277,6 +311,203 @@ class _BasePDF(FPDF):
         self.set_text_color(*C_DARK)
         self.mcell(210 - 2 * MARGIN - 6, 6, _safe(text))
         self.ln(3)
+
+
+    # ── Beautiful full-page pitch deck slide ────────────────────────────────
+    def draw_slide_page(
+        self,
+        slide_num: int,
+        total: int,
+        title: str,
+        content: str,
+        speaker_note: str = "",
+    ):
+        """
+        Render one pitch deck slide as a full A4 page.
+
+        Layout (portrait, 210 × 297 mm):
+        ┌─────────────────────────────────────┐  y=0
+        │  [full dark bg]                     │
+        │                                     │
+        │  [large icon text  - centered]      │  y≈55
+        │                                     │
+        │  [TITLE — 30pt bold white centered] │  y≈95
+        │  [thin accent underline bar]        │  y≈111
+        │                                     │
+        │  ┌─ content card ─────────────────┐ │  y≈125
+        │  │ content text (12pt)            │ │
+        │  └────────────────────────────────┘ │  y≈220
+        │                                     │
+        │  ┌─ speaker notes ────────────────┐ │  y≈232
+        │  │ italic 8pt notes text          │ │
+        │  └────────────────────────────────┘ │  y≈270
+        │                                     │
+        │  [LaunchForge AI · slide N/total]   │  y≈285
+        └─────────────────────────────────────┘  y=297
+        """
+        theme = _slide_theme(title)
+        bg     = theme["bg"]
+        bg2    = theme["bg2"]
+        acc    = theme["acc"]
+        acc2   = theme["acc2"]
+        icon   = theme["icon"]
+
+        W, H = 210, 297   # A4 portrait mm
+
+        # ── Enter slide mode & add blank page ──────────────────────────────
+        self._slide_mode = True
+        self.set_auto_page_break(False)
+        self.add_page()
+
+        # ── Full background (two-tone vertical split) ───────────────────────
+        self.set_fill_color(*bg)
+        self.rect(0, 0, W, H, style="F")
+        # Lighter bottom-half overlay for depth
+        self.set_fill_color(*bg2)
+        self.rect(0, H * 0.5, W, H * 0.5, style="F")
+
+        # ── Subtle diagonal accent bars (decorative) ────────────────────────
+        self.set_fill_color(*acc)
+        # Top-left corner accent block
+        self.set_alpha = lambda a: None   # fpdf2 doesn't support true alpha; simulate with color
+        self.rect(0, 0, 4, H, style="F")
+        # Top-right thin bar
+        self.rect(W - 2, 0, 2, H * 0.6, style="F")
+
+        # ── Slide number badge (top-right circle area) ──────────────────────
+        badge_x, badge_y, badge_r = W - 28, 18, 12
+        # Badge circle (filled square as approximation)
+        self.set_fill_color(*acc)
+        self.rect(badge_x - badge_r, badge_y - badge_r, badge_r * 2, badge_r * 2, style="F")
+        self.set_text_color(*C_WHITE)
+        self.set_font("Sans", "B", 14)
+        self.set_xy(badge_x - badge_r, badge_y - 5)
+        self.cell(badge_r * 2, 10, str(slide_num), align="C", ln=0)
+
+        # Total slides counter (smaller, under badge)
+        self.set_font("Sans", "", 7)
+        self.set_text_color(*acc2)
+        self.set_xy(badge_x - badge_r, badge_y + 6)
+        self.cell(badge_r * 2, 5, f"of {total}", align="C", ln=0)
+
+        # ── Category label (top-left under accent bar) ───────────────────────
+        self.set_font("Sans", "B", 7)
+        self.set_text_color(*acc)
+        self.set_xy(10, 12)
+        self.cell(60, 5, "INVESTOR PITCH DECK", ln=0)
+        self.set_xy(10, 18)
+        self.set_font("Sans", "", 7)
+        self.set_text_color(80, 80, 120)
+        self.cell(60, 5, "LaunchForge AI", ln=0)
+
+        # ── Icon badge (centered, large ASCII symbol in a circle) ────────────
+        icon_y = 42
+        icon_r = 18
+        icon_cx = W / 2
+        # Outer glow circle (lighter fill)
+        self.set_fill_color(acc[0], acc[1], acc[2])
+        # Draw as filled square centered
+        self.rect(icon_cx - icon_r, icon_y - icon_r, icon_r * 2, icon_r * 2, style="F")
+        # Icon text
+        self.set_font("Sans", "B", 24)
+        self.set_text_color(*C_WHITE)
+        self.set_xy(icon_cx - icon_r, icon_y - 9)
+        self.cell(icon_r * 2, 18, icon, align="C", ln=0)
+
+        # ── Title (large, bold, white, centered) ─────────────────────────────
+        title_y = 76
+        self.set_font("Sans", "B", 28)
+        self.set_text_color(*C_WHITE)
+        # Wrap long titles
+        title_str = _safe(title).upper()
+        self.set_xy(16, title_y)
+        self.mcell(W - 32, 12, title_str, align="C")
+
+        # ── Accent underline bar under title ──────────────────────────────────
+        bar_w = min(80 + len(title_str) * 2, W - 40)
+        bar_x = (W - bar_w) / 2
+        bar_y = self.get_y() + 2
+        # Main accent bar
+        self.set_fill_color(*acc)
+        self.rect(bar_x, bar_y, bar_w, 2.5, style="F")
+        # Thinner secondary bar
+        self.set_fill_color(*acc2)
+        self.rect(bar_x + bar_w * 0.3, bar_y + 4, bar_w * 0.4, 1, style="F")
+
+        # ── Content card (light translucent bg) ───────────────────────────────
+        card_x   = 14
+        card_y   = bar_y + 14
+        card_w   = W - 28
+        card_h   = 120
+
+        # Card background
+        self.set_fill_color(255, 255, 255)
+        self.rect(card_x, card_y, card_w, card_h, style="F")
+        # Left accent strip on card
+        self.set_fill_color(*acc)
+        self.rect(card_x, card_y, 3, card_h, style="F")
+
+        # Content text inside card
+        self.set_xy(card_x + 8, card_y + 8)
+        self.set_font("Sans", "", 10)
+        self.set_text_color(30, 30, 50)
+        # Split content into bullet-like lines
+        content_clean = _safe(content)
+        # Auto-detect if content has bullet separators
+        if ". " in content_clean and len(content_clean) > 60:
+            import re
+            # Split on sentence boundaries for natural bullet flow
+            sentences = re.split(r'(?<=[.!?])\s+', content_clean)
+            for sent in sentences[:6]:
+                sent = sent.strip()
+                if not sent:
+                    continue
+                self.set_x(card_x + 8)
+                self.set_font("Sans", "B", 8)
+                self.set_text_color(*acc)
+                self.cell(5, 6, "-", ln=0)
+                self.set_x(card_x + 14)
+                self.set_font("Sans", "", 9)
+                self.set_text_color(30, 30, 50)
+                self.mcell(card_w - 20, 6, sent)
+                self.ln(1)
+        else:
+            self.set_xy(card_x + 8, card_y + 8)
+            self.mcell(card_w - 16, 7, content_clean)
+
+        # ── Speaker notes strip ────────────────────────────────────────────────
+        if speaker_note:
+            notes_y  = H - 55
+            notes_h  = 28
+            # Notes background
+            self.set_fill_color(20, 20, 40)
+            self.rect(0, notes_y, W, notes_h, style="F")
+            # Left accent bar
+            self.set_fill_color(*acc)
+            self.rect(0, notes_y, 3, notes_h, style="F")
+            # Label
+            self.set_xy(8, notes_y + 4)
+            self.set_font("Sans", "B", 7)
+            self.set_text_color(*acc)
+            self.cell(30, 5, "SPEAKER NOTES", ln=0)
+            # Note text
+            self.set_xy(8, notes_y + 10)
+            self.set_font("Sans", "I", 8)
+            self.set_text_color(160, 160, 200)
+            self.mcell(W - 16, 5, _safe(speaker_note)[:220])
+
+        # ── Bottom bar & branding ──────────────────────────────────────────────
+        self.set_fill_color(*acc)
+        self.rect(0, H - 6, W, 6, style="F")
+        self.set_xy(8, H - 14)
+        self.set_font("Sans", "", 7)
+        self.set_text_color(120, 120, 160)
+        self.cell(W - 16, 5, f"LaunchForge AI  |  {SITE_URL}  |  {DATE_STR}", align="L", ln=0)
+
+        # ── Restore normal mode ────────────────────────────────────────────────
+        self._slide_mode = False
+        self.set_auto_page_break(True, margin=18)
+        self.set_margins(MARGIN, 10, MARGIN)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -680,47 +911,49 @@ def generate_marketing_pdf(data: dict, idea: str) -> bytes:
                 pdf.mcell(0, 5, _safe(em.get("body", "")))
                 pdf.ln(2)
 
-    # ── Pitch Deck ──────────────────────────────────────────────────────────
+    # ── Pitch Deck — each slide gets a beautiful full page ──────────────────
     slides = data.get("pitchDeck", [])
-    if isinstance(slides, list) and slides:
+    valid_slides = [s for s in slides if isinstance(s, dict)] if isinstance(slides, list) else []
+    if valid_slides:
+        # Transition page — "Investor Pitch Deck" cover
         pdf.add_page()
-        pdf.page_title("Investor Pitch Deck", f"10-Slide Deck · {idea[:60]}")
+        pdf.set_fill_color(*C_NAVY)
+        pdf.rect(0, 0, 210, 297, style="F")
+        pdf.set_fill_color(*C_PURPLE)
+        pdf.rect(0, 0, 4, 297, style="F")
+        pdf.rect(206, 0, 4, 297, style="F")
+        pdf.rect(0, 0, 210, 4, style="F")
+        pdf.rect(0, 293, 210, 4, style="F")
+        pdf.set_xy(14, 110)
+        pdf.set_font("Sans", "B", 8)
+        pdf.set_text_color(*C_PURPLE_LT)
+        pdf.cell(182, 8, "INVESTOR PITCH DECK", align="C", ln=1)
+        pdf.set_xy(14, 122)
+        pdf.set_font("Sans", "B", 32)
+        pdf.set_text_color(*C_WHITE)
+        pdf.mcell(182, 14, "LaunchForge AI", align="C")
+        pdf.set_xy(14, pdf.get_y() + 4)
+        pdf.set_font("Sans", "", 12)
+        pdf.set_text_color(167, 119, 248)
+        pdf.mcell(182, 8, _safe(idea[:70]), align="C")
+        pdf.set_fill_color(*C_PURPLE)
+        pdf.rect(65, pdf.get_y() + 6, 80, 2, style="F")
+        pdf.set_xy(14, pdf.get_y() + 16)
+        pdf.set_font("Sans", "", 9)
+        pdf.set_text_color(100, 100, 140)
+        pdf.mcell(182, 6, f"{len(valid_slides)}-Slide Deck  |  {DATE_STR}", align="C")
+        pdf.set_fill_color(*C_PURPLE)
+        pdf.rect(0, 293, 210, 4, style="F")
 
-        for slide in slides:
-            if not isinstance(slide, dict):
-                continue
-            slide_num = slide.get("slide", "")
-            title     = slide.get("title", "")
-            content   = slide.get("content", "")
-            note      = slide.get("speakerNote", "")
-
-            # Slide header bar
-            pdf.set_fill_color(*C_NAVY)
-            pdf.set_text_color(*C_WHITE)
-            pdf.set_font("Sans", "B", 11)
-            bar_h = 10
-            pdf.rect(MARGIN, pdf.get_y(), 210 - 2 * MARGIN, bar_h, style="F")
-            pdf.set_x(MARGIN + 3)
-            pdf.cell(210 - 2 * MARGIN - 3, bar_h,
-                     f"Slide {slide_num}  ·  {title}", ln=1)
-
-            # Accent strip
-            pdf.set_fill_color(*C_PURPLE)
-            pdf.rect(MARGIN, pdf.get_y(), 210 - 2 * MARGIN, 1.5, style="F")
-            pdf.ln(4)
-
-            # Content
-            pdf.set_font("Sans", "", 9)
-            pdf.set_text_color(*C_DARK)
-            pdf.mcell(0, LINE_H, _safe(content))
-            pdf.ln(2)
-
-            # Speaker note (italic, muted)
-            if note:
-                pdf.set_font("Sans", "I", 8)
-                pdf.set_text_color(*C_GRAY)
-                pdf.mcell(0, 5, f"Speaker note: {_safe(note)}")
-            pdf.ln(5)
+        # Individual slides
+        for slide in valid_slides:
+            pdf.draw_slide_page(
+                slide_num    = int(slide.get("slide", 1)),
+                total        = len(valid_slides),
+                title        = str(slide.get("title", "")),
+                content      = str(slide.get("content", "")),
+                speaker_note = str(slide.get("speakerNote", "")),
+            )
 
     return bytes(pdf.output())
 
