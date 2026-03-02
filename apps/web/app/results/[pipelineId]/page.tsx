@@ -3,11 +3,27 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import Image from 'next/image'
 import {
   CheckCircle, Download, ExternalLink, Code2, Shield, BarChart3,
   Target, Globe, ArrowLeft, Zap, Copy, ChevronDown, ChevronUp
 } from 'lucide-react'
+
+/** Extract a display string from a keyword entry that may be a string or object */
+function extractKeyword(kw: unknown): string {
+  if (typeof kw === 'string') return kw
+  if (typeof kw === 'object' && kw !== null) {
+    const o = kw as Record<string, unknown>
+    return String(o.keyword ?? o.term ?? o.name ?? o.value ?? Object.values(o)[0] ?? '')
+  }
+  return String(kw)
+}
+
+/** Safely render a value that might be a string, number, or object */
+function safeStr(val: unknown): string {
+  if (val === null || val === undefined) return ''
+  if (typeof val === 'object') return JSON.stringify(val)
+  return String(val)
+}
 
 interface PipelineState {
   pipelineId: string
@@ -141,7 +157,7 @@ export default function ResultsPage() {
           {[
             { label: 'Market Score', value: v.marketScore ? `${v.marketScore}/100` : '—', color: '#22c55e' },
             { label: 'Security Score', value: sec.overallScore ? `${sec.overallScore}/100` : '—', color: '#3b82f6' },
-            { label: 'Tech Stack', value: (a.recommendedStack as { frontend?: string })?.frontend || 'Next.js', color: '#a855f7' },
+            { label: 'Tech Stack', value: (() => { const raw = (a.recommendedStack as { frontend?: string })?.frontend || 'Next.js'; return raw.split(/[\s,.(]/)[0].slice(0, 14) })(), color: '#a855f7' },
             { label: 'GTM Channels', value: Array.isArray(s.targetChannels) ? `${(s.targetChannels as string[]).length} channels` : '4 channels', color: '#f59e0b' },
           ].map(b => (
             <div key={b.label} className="glass-card p-4 text-center">
@@ -321,14 +337,8 @@ export default function ResultsPage() {
               {/* Hero Image */}
               {copy.heroImage && typeof copy.heroImage === 'string' && (
                 <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <Image
-                    src={copy.heroImage as string}
-                    alt="Hero section image"
-                    width={1280}
-                    height={720}
-                    className="w-full object-cover"
-                    unoptimized
-                  />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={copy.heroImage} alt="Hero section image" className="w-full object-cover" loading="lazy" />
                 </div>
               )}
               {Array.isArray(copy.taglines) && (
@@ -365,14 +375,8 @@ export default function ResultsPage() {
                 <div>
                   <div className="text-xs text-slate-500 mb-2">Social Sharing Preview (OG Image)</div>
                   <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
-                    <Image
-                      src={copy.ogImage as string}
-                      alt="OG social sharing image"
-                      width={1200}
-                      height={630}
-                      className="w-full object-cover"
-                      unoptimized
-                    />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={copy.ogImage} alt="OG social sharing image" className="w-full object-cover" loading="lazy" />
                   </div>
                 </div>
               )}
@@ -384,14 +388,8 @@ export default function ResultsPage() {
                     {(copy.pitchDeck as Array<{slide: number; title: string; content: string; slideImage?: string; speakerNote?: string}>).map((slide) => (
                       <div key={slide.slide} className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
                         {slide.slideImage && (
-                          <Image
-                            src={slide.slideImage}
-                            alt={`Slide ${slide.slide}: ${slide.title}`}
-                            width={1280}
-                            height={720}
-                            className="w-full object-cover"
-                            unoptimized
-                          />
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={slide.slideImage} alt={`Slide ${slide.slide}: ${slide.title}`} className="w-full object-cover" loading="lazy" />
                         )}
                         <div className="p-3">
                           <div className="flex items-center gap-2 mb-1">
@@ -415,10 +413,10 @@ export default function ResultsPage() {
             <div className="space-y-3">
               {seo.metaTags && typeof seo.metaTags === 'object' && (
                 <div className="space-y-2 text-xs">
-                  {Object.entries(seo.metaTags as Record<string, string>).map(([k, v]) => (
+                  {Object.entries(seo.metaTags as Record<string, unknown>).map(([k, v]) => (
                     <div key={k} className="flex gap-2">
                       <span className="text-slate-500 w-24 flex-shrink-0 capitalize">{k}:</span>
-                      <span className="text-slate-300">{v}</span>
+                      <span className="text-slate-300">{safeStr(v)}</span>
                     </div>
                   ))}
                 </div>
@@ -427,11 +425,47 @@ export default function ResultsPage() {
                 <div>
                   <div className="text-xs text-slate-500 mb-2">Primary Keywords</div>
                   <div className="flex flex-wrap gap-2">
-                    {(seo.primaryKeywords as string[]).map((kw: string) => (
-                      <span key={kw} className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(6,182,212,0.1)', color: '#67e8f9', border: '1px solid rgba(6,182,212,0.2)' }}>{kw}</span>
+                    {(seo.primaryKeywords as unknown[]).map((kw, i) => {
+                      const label = extractKeyword(kw)
+                      const vol = typeof kw === 'object' && kw !== null ? (kw as Record<string,unknown>).estimatedVolume : null
+                      return (
+                        <span key={i} className="text-xs px-2 py-1 rounded-full flex items-center gap-1" style={{ background: 'rgba(6,182,212,0.1)', color: '#67e8f9', border: '1px solid rgba(6,182,212,0.2)' }}>
+                          {label}{vol ? <span className="opacity-60 text-[10px]">· {safeStr(vol)}</span> : null}
+                        </span>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+              {Array.isArray(seo.longTailKeywords) && (
+                <div>
+                  <div className="text-xs text-slate-500 mb-2">Long-tail Keywords</div>
+                  <div className="flex flex-wrap gap-2">
+                    {(seo.longTailKeywords as unknown[]).map((kw, i) => (
+                      <span key={i} className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(124,58,237,0.1)', color: '#c084fc', border: '1px solid rgba(124,58,237,0.2)' }}>
+                        {extractKeyword(kw)}
+                      </span>
                     ))}
                   </div>
                 </div>
+              )}
+              {Array.isArray(seo.contentStrategy) && (
+                <div>
+                  <div className="text-xs text-slate-500 mb-2">Content Strategy</div>
+                  <ul className="space-y-1">
+                    {(seo.contentStrategy as unknown[]).map((item, i) => (
+                      <li key={i} className="text-xs text-slate-400 flex gap-2">
+                        <span className="text-cyan-400">›</span> {safeStr(item)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {seo.estimatedMonthlySearchVolume && (
+                <p className="text-xs text-slate-400">
+                  <span className="text-slate-500">Est. Monthly Search Volume: </span>
+                  <span className="text-cyan-300 font-medium">{safeStr(seo.estimatedMonthlySearchVolume)}</span>
+                </p>
               )}
             </div>
           </SectionCard>
